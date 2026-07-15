@@ -1,0 +1,520 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Calendar as CalendarIcon, 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Trash2, 
+  User, 
+  Briefcase, 
+  Plane, 
+  Loader2,
+  AlertCircle
+} from 'lucide-react';
+
+// รายการวันหยุดธนาคาร
+const BANK_HOLIDAYS = {
+  '2026-01-01': 'วันขึ้นปีใหม่',
+  '2026-03-02': 'วันมาฆบูชา',
+  '2026-04-06': 'วันพระบาทสมเด็จพระพุทธยอดฟ้าจุฬาโลกมหาราชฯ',
+  '2026-04-13': 'วันสงกรานต์',
+  '2026-04-14': 'วันสงกรานต์',
+  '2026-04-15': 'วันสงกรานต์',
+  '2026-05-01': 'วันแรงงานแห่งชาติ',
+  '2026-05-04': 'วันฉัตรมงคล',
+  '2026-06-03': 'วันเฉลิมพระชนมพรรษาสมเด็จพระนางเจ้าฯ พระบรมราชินี',
+  '2026-07-28': 'วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว',
+  '2026-07-29': 'วันอาสาฬหบูชา',
+  '2026-08-12': 'วันเฉลิมพระชนมพรรษาสมเด็จพระบรมราชชนนีพันปีหลวงฯ',
+  '2026-10-13': 'วันคล้ายวันสวรรคตพระบาทสมเด็จพระบรมชนกาธิเบศรฯ',
+  '2026-10-23': 'วันปิยมหาราช',
+  '2026-12-05': 'วันคล้ายวันพระบรมราชสมภพพระบาทสมเด็จพระบรมชนกาธิเบศรฯ',
+  '2026-12-10': 'วันรัฐธรรมนูญ',
+  '2026-12-31': 'วันสิ้นปี'
+};
+
+const TEAM_MEMBERS = [
+  'พี่ฤทธิ์', 'พี่อี๊ด', 'พี่ตู่', 'พี่นนท์', 'พี่มิม', 
+  'พี่พั๊นซ์', 'พี่พลอบ', 'พี่เอ็ม', 'พี่เค้ก', 'น้องเกม', 'น้องรุ้ง'
+];
+
+const getLocalDateStr = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const renderThaiDate = (dateStr) => {
+  if (!dateStr) return '';
+  const [y, m, day] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+const getDayNameText = (dateStr) => {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dayNamesShort = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  return dayNamesShort[new Date(y, m - 1, d).getDay()];
+};
+
+export default function App() {
+  const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+  const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO;
+  const FILE_PATH = 'db.json';
+
+  const [events, setEvents] = useState([]);
+  const [fileSha, setFileSha] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [currentDate, setCurrentDate] = useState(new Date()); 
+  const [selectedDateStr, setSelectedDateStr] = useState(getLocalDateStr(new Date()));
+  const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState('WFH');
+  const [isRecurring, setIsRecurring] = useState(false);
+
+  // คำนวณช่วงปีแบบ Dynamic อิงจากปีปัจจุบัน ณ ขณะนั้น (ย้อนหลัง 2 ปี - ล่วงหน้า 4 ปี)
+  const currentActualYear = new Date().getFullYear();
+  const dynamicYears = Array.from({ length: 7 }, (_, i) => currentActualYear - 2 + i);
+
+  const toBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
+  const fromBase64 = (str) => decodeURIComponent(escape(atob(str)));
+
+  const fetchDatabase = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`, {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูล GitHub ได้ กรุณาตรวจสอบ Token หรือ Repository');
+
+      const data = await res.json();
+      setFileSha(data.sha);
+
+      const rawContent = fromBase64(data.content.replace(/\s/g, ''));
+      const parsed = JSON.parse(rawContent);
+      setEvents(parsed.events || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (GITHUB_TOKEN && GITHUB_REPO) {
+      fetchDatabase();
+    } else {
+      setError('กรุณาตั้งค่า VITE_GITHUB_TOKEN และ VITE_GITHUB_REPO ในไฟล์ .env.local');
+      setLoading(false);
+    }
+  }, []);
+
+  const handleGoToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDateStr(getLocalDateStr(today));
+  };
+
+  const updateDatabase = async (newEvents, commitMessage) => {
+    setSubmitting(true);
+    try {
+      const updatedData = { events: newEvents };
+      const jsonString = JSON.stringify(updatedData, null, 2);
+      
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+          message: commitMessage,
+          content: toBase64(jsonString),
+          sha: fileSha
+        })
+      });
+
+      if (!res.ok) throw new Error('บันทึกข้อมูลไม่สำเร็จ มีการอัปเดตซ้อนจากสมาชิกคนอื่น กรุณารีเฟรชแอป');
+
+      const data = await res.json();
+      setFileSha(data.content.sha);
+      setEvents(newEvents);
+      return true;
+    } catch (err) {
+      alert(err.message);
+      fetchDatabase();
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddEvent = async (e) => {
+    e.preventDefault();
+    if (!formName) return alert('กรุณาเลือกชื่อของคุณจากรายการ');
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    if (formType === 'WFH' && isRecurring) {
+      const [selY, selM, selD] = selectedDateStr.split('-').map(Number);
+      const targetDayOfWeek = new Date(selY, selM - 1, selD).getDay(); 
+      
+      const datesToAdd = [];
+      const skippedDays = [];
+
+      const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+      for (let d = 1; d <= totalDaysInMonth; d++) {
+        const currentLoopDate = new Date(year, month, d);
+        if (currentLoopDate.getDay() === targetDayOfWeek) {
+          const loopDateStr = getLocalDateStr(currentLoopDate);
+          
+          const isUserDup = events.some(ev => ev.date === loopDateStr && ev.name === formName);
+          const wfhCountOnDay = events.filter(ev => ev.date === loopDateStr && ev.type === 'WFH').length;
+
+          if (isUserDup || wfhCountOnDay >= 2) {
+            skippedDays.push(d);
+          } else {
+            datesToAdd.push(loopDateStr);
+          }
+        }
+      }
+
+      if (datesToAdd.length === 0) {
+        alert('❌ ไม่สามารถจองรายสัปดาห์ได้ เนื่องจากชื่อซ้ำหรือโควต้า WFH เต็มหมดแล้วในทุกสัปดาห์ของเดือนนี้');
+        return;
+      }
+
+      const generatedEvents = datesToAdd.map(dateStr => ({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: formName,
+        date: dateStr,
+        type: 'WFH'
+      }));
+
+      const updatedEvents = [...events, ...generatedEvents];
+      const success = await updateDatabase(updatedEvents, `Add recurring WFH for ${formName}`);
+      if (success) {
+        setFormName('');
+        setIsRecurring(false);
+        if (skippedDays.length > 0) {
+          alert(`บันทึกสำเร็จ! ข้ามวันที่ลงทะเบียนไม่ได้: ${skippedDays.join(', ')} (เนื่องจากชื่อซ้ำหรือโควต้าเต็ม)`);
+        }
+      }
+      return;
+    }
+
+    const isDuplicate = events.some(ev => ev.date === selectedDateStr && ev.name === formName);
+    if (isDuplicate) {
+      alert(`❌ ${formName} ได้ลงทะเบียนใช้งานในวันที่เลือกนี้ไปแล้ว ไม่สามารถเลือกซ้ำได้`);
+      return;
+    }
+
+    if (formType === 'WFH') {
+      const wfhCountOnDay = events.filter(ev => ev.date === selectedDateStr && ev.type === 'WFH').length;
+      if (wfhCountOnDay >= 2) {
+        alert('❌ โควต้า WFH วันนี้เต็มแล้ว (จำกัดไม่เกิน 2 คนต่อวัน) กรุณาเลือกวันอื่น หรือเปลี่ยนเป็นสิทธิ์วันลา');
+        return;
+      }
+    }
+
+    const newEvent = {
+      id: Date.now().toString(),
+      name: formName,
+      date: selectedDateStr,
+      type: formType
+    };
+
+    const updatedEvents = [...events, newEvent];
+    const success = await updateDatabase(updatedEvents, `Add ${formType} for ${formName}`);
+    if (success) setFormName('');
+  };
+
+  const handleDeleteEvent = async (id, name, type) => {
+    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบรายการนี้?')) return;
+    const updatedEvents = events.filter(ev => ev.id !== id);
+    await updateDatabase(updatedEvents, `Delete ${type} of ${name}`);
+  };
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const daysArray = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    daysArray.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    daysArray.push(new Date(year, month, i));
+  }
+
+  const changeMonth = (offset) => {
+    setCurrentDate(new Date(year, month + offset, 1));
+  };
+
+  const monthNames = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased pb-12">
+      <header className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-md sticky top-0 z-10 px-4 py-3">
+        <div className="max-w-md mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <CalendarIcon className="w-6 h-6" />
+            <h1 className="text-lg font-bold tracking-wide">WFH & Leave Tracker</h1>
+          </div>
+          {loading && <Loader2 className="w-5 h-5 animate-spin text-white/80" />}
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto px-3 mt-4 space-y-4">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl flex items-start space-x-2 text-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* 1. เลย์เอาต์ใหม่: ปุ่ม [วันนี้] แยกรอยต่อขนานคู่กับบล็อกปรับเดือน/ปี */}
+        <div className="flex space-x-2 items-stretch">
+          <button 
+            type="button"
+            onClick={handleGoToToday}
+            className="bg-slate-950 text-white font-bold px-4 rounded-2xl hover:bg-slate-800 active:scale-95 transition text-sm flex items-center justify-center shadow-sm whitespace-nowrap"
+          >
+            วันนี้
+          </button>
+          
+          <div className="flex-1 bg-white rounded-2xl px-3 py-2 shadow-sm border border-slate-100 flex justify-between items-center">
+            <button type="button" onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center space-x-1">
+              <span className="text-sm font-bold text-slate-700">{monthNames[month]}</span>
+              <select
+                value={year}
+                onChange={(e) => setCurrentDate(new Date(Number(e.target.value), month, 1))}
+                className="text-sm font-bold text-blue-600 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {dynamicYears.map((y) => (
+                  <option key={y} value={y}>พ.ศ. {y + 543}</option>
+                ))}
+              </select>
+            </div>
+
+            <button type="button" onClick={() => changeMonth(1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-3 shadow-sm border border-slate-100">
+          <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400 mb-2">
+            <div>อา</div><div>จ</div><div>อ</div><div>พ</div><div>พฤ</div><div>ศ</div><div>ส</div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {daysArray.map((date, idx) => {
+              if (!date) return <div key={`empty-${idx}`} className="aspect-square"></div>;
+
+              const dateStr = getLocalDateStr(date);
+              const dayOfWeek = date.getDay();
+              const isWeekday = dayOfWeek > 0 && dayOfWeek < 6;
+              
+              const isBankHoliday = !!BANK_HOLIDAYS[dateStr];
+              const dayEvents = events.filter(ev => ev.date === dateStr);
+
+              const isGoldDay = isWeekday && !isBankHoliday && dayEvents.length === 0;
+              const isSelected = selectedDateStr === dateStr;
+
+              let bgClass = 'bg-slate-50 hover:bg-slate-100';
+              if (isGoldDay) bgClass = 'bg-amber-100 text-amber-900 border border-amber-300 font-medium';
+              if (isBankHoliday) bgClass = 'bg-rose-50 text-rose-700';
+              if (isSelected) bgClass = 'ring-2 ring-blue-600 ring-offset-1 bg-blue-50';
+
+              return (
+                <button
+                  key={dateStr}
+                  type="button"
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  className={`aspect-square rounded-2xl flex flex-col justify-between p-1.5 transition relative ${bgClass}`}
+                >
+                  <span className={`text-xs font-semibold ${isBankHoliday ? 'text-rose-600' : ''}`}>
+                    {date.getDate()}
+                  </span>
+
+                  <div className="w-full space-y-0.5 text-[9px] scale-90 origin-bottom">
+                    {dayEvents.slice(0, 2).map((ev) => (
+                      <div 
+                        key={ev.id} 
+                        className={`${
+                          ev.type === 'WFH' ? 'bg-blue-600' : 'bg-rose-600'
+                        } text-white rounded px-0.5 truncate text-center leading-tight`}
+                      >
+                        {ev.name}
+                      </div>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <div className="text-[8px] text-slate-400 text-center font-bold">+{dayEvents.length - 2}</div>
+                    )}
+                    {isGoldDay && (
+                      <div className="text-amber-600 text-center font-bold text-[10px] animate-pulse">✨</div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs text-slate-400 font-medium">วันที่เลือก</span>
+            <div className="text-base font-bold text-slate-700 flex items-center justify-between">
+              <span>{renderThaiDate(selectedDateStr)}</span>
+              {BANK_HOLIDAYS[selectedDateStr] && (
+                <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-medium">
+                  {BANK_HOLIDAYS[selectedDateStr]}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">ผู้ลงทะเบียนใช้งาน</h3>
+            {events.filter(ev => ev.date === selectedDateStr).length === 0 ? (
+              <p className="text-sm text-slate-400 italic py-2 flex items-center space-x-1">
+                <span>ไม่มีผู้ลงทะเบียน</span>
+                {(() => {
+                  if (!selectedDateStr) return null;
+                  const [y, m, d] = selectedDateStr.split('-').map(Number);
+                  const dayVal = new Date(y, m - 1, d).getDay();
+                  return dayVal > 0 && dayVal < 6 && !BANK_HOLIDAYS[selectedDateStr] ? (
+                    <span className="text-amber-600 font-bold not-italic">(✨ วันทองคำ)</span>
+                  ) : null;
+                })()}
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {events
+                  .filter(ev => ev.date === selectedDateStr)
+                  .map((ev) => (
+                    <div key={ev.id} className="flex justify-between items-center py-2.5">
+                      <div className="flex items-center space-x-3">
+                        {ev.type === 'WFH' ? (
+                          <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                            <Briefcase className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                            <Plane className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">{ev.name}</p>
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            {ev.type === 'WFH' ? '💻 Work From Home' : '🌴 วันลาพักผ่อน'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEvent(ev.id, ev.name, ev.type)}
+                        disabled={submitting}
+                        className="p-2 text-slate-300 hover:text-red-500 active:bg-red-50 rounded-xl transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleAddEvent} className="pt-2 border-t border-slate-100 space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">บันทึกรายการใหม่</h3>
+            
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                onClick={() => { setFormType('WFH'); }}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
+                  formType === 'WFH'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Work From Home
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFormType('Leave'); setIsRecurring(false); }}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
+                  formType === 'Leave'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                วันลาพักผ่อน
+              </button>
+            </div>
+
+            {formType === 'WFH' && (
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-100 p-2 rounded-xl transition">
+                <input
+                  type="checkbox"
+                  id="recurring-wfh"
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 border-slate-300 transition"
+                />
+                <label htmlFor="recurring-wfh" className="text-xs text-slate-600 font-semibold select-none cursor-pointer">
+                  สมัคร WFH ทุกวัน{getDayNameText(selectedDateStr)} ของเดือน{monthNames[month]}นี้
+                </label>
+              </div>
+            )}
+
+            <div className="flex space-x-2">
+              <div className="relative flex-1">
+                <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10" />
+                <select
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 bg-slate-50 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-700 appearance-none relative z-0"
+                >
+                  <option value="">เลือกชื่อของคุณ...</option>
+                  {TEAM_MEMBERS.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-3 pointer-events-none w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-slate-400"></div>
+              </div>
+              <button
+                type="submit"
+                disabled={submitting || loading}
+                className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 active:scale-95 transition disabled:opacity-50 flex items-center space-x-1"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <span>บันทึก</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+  );
+}
