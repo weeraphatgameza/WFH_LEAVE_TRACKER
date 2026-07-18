@@ -12,7 +12,6 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// รายการวันหยุดธนาคาร
 const BANK_HOLIDAYS = {
   '2026-01-01': 'วันขึ้นปีใหม่',
   '2026-03-02': 'วันมาฆบูชา',
@@ -34,8 +33,17 @@ const BANK_HOLIDAYS = {
 };
 
 const TEAM_MEMBERS = [
-  'พี่ฤทธิ์', 'พี่อี๊ด', 'พี่ตู่', 'พี่นนท์', 'พี่มิม', 
-  'พี่พั๊นซ์', 'พี่พลอบ', 'พี่เอ็ม', 'พี่เค้ก', 'น้องเกม', 'น้องรุ้ง'
+  { name: 'พี่ฤทธิ์', floor: 24 },
+  { name: 'พี่อี๊ด', floor: 24 },
+  { name: 'พี่ตู่', floor: 3 },
+  { name: 'พี่นนท์', floor: 3 },
+  { name: 'พี่มิม', floor: 3 },
+  { name: 'พี่พั๊นซ์', floor: 3 },
+  { name: 'พี่พลอย', floor: 3 },
+  { name: 'พี่เอ็ม', floor: 3 },
+  { name: 'พี่เค้ก', floor: 24 },
+  { name: 'น้องเกม', floor: 24 },
+  { name: 'น้องรุ้ง', floor: 24 }
 ];
 
 const getLocalDateStr = (d) => {
@@ -59,10 +67,6 @@ const getDayNameText = (dateStr) => {
 };
 
 export default function App() {
-  const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
-  const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO;
-  const FILE_PATH = 'db.json';
-
   const [events, setEvents] = useState([]);
   const [fileSha, setFileSha] = useState('');
   const [loading, setLoading] = useState(true);
@@ -75,25 +79,38 @@ export default function App() {
   const [formType, setFormType] = useState('WFH');
   const [isRecurring, setIsRecurring] = useState(false);
 
-  // คำนวณช่วงปีแบบ Dynamic อิงจากปีปัจจุบัน ณ ขณะนั้น (ย้อนหลัง 2 ปี - ล่วงหน้า 4 ปี)
+  const [leaveStartDate, setLeaveStartDate] = useState(getLocalDateStr(new Date()));
+  const [leaveEndDate, setLeaveEndDate] = useState(getLocalDateStr(new Date()));
+
   const currentActualYear = new Date().getFullYear();
   const dynamicYears = Array.from({ length: 7 }, (_, i) => currentActualYear - 2 + i);
 
   const toBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
   const fromBase64 = (str) => decodeURIComponent(escape(atob(str)));
 
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const API_ENDPOINT = isLocal ? `https://api.github.com/repos/${import.meta.env.VITE_GITHUB_REPO}/contents/db.json` : '/api/tracker';
+
+  useEffect(() => {
+    setLeaveStartDate(selectedDateStr);
+    setLeaveEndDate(selectedDateStr);
+  }, [selectedDateStr]);
+
   const fetchDatabase = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
+      
+      const fetchOptions = {};
+      if (isLocal) {
+        fetchOptions.headers = {
+          'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
-        }
-      });
+        };
+      }
 
-      if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูล GitHub ได้ กรุณาตรวจสอบ Token หรือ Repository');
+      const res = await fetch(API_ENDPOINT, fetchOptions);
+      if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูลได้');
 
       const data = await res.json();
       setFileSha(data.sha);
@@ -109,11 +126,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (GITHUB_TOKEN && GITHUB_REPO) {
-      fetchDatabase();
+    if (isLocal) {
+      if (import.meta.env.VITE_GITHUB_TOKEN && import.meta.env.VITE_GITHUB_REPO) {
+        fetchDatabase();
+      } else {
+        setError('กรุณาตั้งค่า VITE_GITHUB_TOKEN และ VITE_GITHUB_REPO ในไฟล์ .env.local');
+        setLoading(false);
+      }
     } else {
-      setError('กรุณาตั้งค่า VITE_GITHUB_TOKEN และ VITE_GITHUB_REPO ในไฟล์ .env.local');
-      setLoading(false);
+      fetchDatabase();
     }
   }, []);
 
@@ -129,20 +150,26 @@ export default function App() {
       const updatedData = { events: newEvents };
       const jsonString = JSON.stringify(updatedData, null, 2);
       
-      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`, {
+      const fetchOptions = {
         method: 'PUT',
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github.v3+json'
-        },
         body: JSON.stringify({
           message: commitMessage,
           content: toBase64(jsonString),
           sha: fileSha
         })
-      });
+      };
 
+      if (isLocal) {
+        fetchOptions.headers = {
+          'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        };
+      } else {
+        fetchOptions.headers = { 'Content-Type': 'application/json' };
+      }
+
+      const res = await fetch(API_ENDPOINT, fetchOptions);
       if (!res.ok) throw new Error('บันทึกข้อมูลไม่สำเร็จ มีการอัปเดตซ้อนจากสมาชิกคนอื่น กรุณารีเฟรชแอป');
 
       const data = await res.json();
@@ -162,6 +189,54 @@ export default function App() {
     e.preventDefault();
     if (!formName) return alert('กรุณาเลือกชื่อของคุณจากรายการ');
 
+    const userObj = TEAM_MEMBERS.find(m => m.name === formName);
+    const userFloor = userObj ? userObj.floor : 24;
+
+    if (formType === 'Leave') {
+      let start = new Date(leaveStartDate);
+      let end = new Date(leaveEndDate);
+
+      if (start > end) return alert('❌ วันเริ่มต้นจองต้องไม่เกินวันสิ้นสุด');
+
+      const datesToAdd = [];
+      const skippedDays = [];
+
+      while (start <= end) {
+        const dayOfWeek = start.getDay();
+        const loopDateStr = getLocalDateStr(start);
+
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          const isDuplicate = events.some(ev => ev.date === loopDateStr && ev.name === formName);
+          if (isDuplicate) {
+            skippedDays.push(start.getDate());
+          } else {
+            datesToAdd.push(loopDateStr);
+          }
+        }
+        start.setDate(start.getDate() + 1);
+      }
+
+      if (datesToAdd.length === 0) {
+        alert('❌ ไม่สามารถบันทึกวันลาในช่วงนี้ได้ เนื่องจากเป็นวันหยุดเสาร์-อาทิตย์ทั้งหมด หรือคุณได้ลงทะเบียนซ้ำไปแล้ว');
+        setFormName('');
+        return;
+      }
+
+      const generatedLeaves = datesToAdd.map(dateStr => ({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: formName,
+        date: dateStr,
+        type: 'Leave'
+      }));
+
+      const updatedEvents = [...events, ...generatedLeaves];
+      const success = await updateDatabase(updatedEvents, `Add Leave range for ${formName}`);
+      if (success) {
+        setFormName('');
+      }
+      return;
+    }
+
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
@@ -179,9 +254,18 @@ export default function App() {
           const loopDateStr = getLocalDateStr(currentLoopDate);
           
           const isUserDup = events.some(ev => ev.date === loopDateStr && ev.name === formName);
-          const wfhCountOnDay = events.filter(ev => ev.date === loopDateStr && ev.type === 'WFH').length;
+          
+          let isQuotaFull = false;
+          if (userFloor === 3) {
+            const floor3WfhCount = events.filter(ev => {
+              if (ev.date !== loopDateStr || ev.type !== 'WFH') return false;
+              const evUser = TEAM_MEMBERS.find(m => m.name === ev.name);
+              return evUser && evUser.floor === 3;
+            }).length;
+            if (floor3WfhCount >= 2) isQuotaFull = true;
+          }
 
-          if (isUserDup || wfhCountOnDay >= 2) {
+          if (isUserDup || isQuotaFull) {
             skippedDays.push(d);
           } else {
             datesToAdd.push(loopDateStr);
@@ -190,7 +274,9 @@ export default function App() {
       }
 
       if (datesToAdd.length === 0) {
-        alert('❌ ไม่สามารถจองรายสัปดาห์ได้ เนื่องจากชื่อซ้ำหรือโควต้า WFH เต็มหมดแล้วในทุกสัปดาห์ของเดือนนี้');
+        alert('❌ ไม่สามารถจอง WFH รายสัปดาห์ได้ เนื่องจากชื่อซ้ำหรือโควต้าชั้น 3 เต็มหมดแล้ว');
+        setFormName(''); 
+        setIsRecurring(false);
         return;
       }
 
@@ -207,7 +293,7 @@ export default function App() {
         setFormName('');
         setIsRecurring(false);
         if (skippedDays.length > 0) {
-          alert(`บันทึกสำเร็จ! ข้ามวันที่ลงทะเบียนไม่ได้: ${skippedDays.join(', ')} (เนื่องจากชื่อซ้ำหรือโควต้าเต็ม)`);
+          alert(`บันทึกสำเร็จ! ข้ามวันที่ไม่เข้าเงื่อนไข: วันที่ ${skippedDays.join(', ')}`);
         }
       }
       return;
@@ -216,13 +302,20 @@ export default function App() {
     const isDuplicate = events.some(ev => ev.date === selectedDateStr && ev.name === formName);
     if (isDuplicate) {
       alert(`❌ ${formName} ได้ลงทะเบียนใช้งานในวันที่เลือกนี้ไปแล้ว ไม่สามารถเลือกซ้ำได้`);
+      setFormName(''); 
       return;
     }
 
-    if (formType === 'WFH') {
-      const wfhCountOnDay = events.filter(ev => ev.date === selectedDateStr && ev.type === 'WFH').length;
-      if (wfhCountOnDay >= 2) {
-        alert('❌ โควต้า WFH วันนี้เต็มแล้ว (จำกัดไม่เกิน 2 คนต่อวัน) กรุณาเลือกวันอื่น หรือเปลี่ยนเป็นสิทธิ์วันลา');
+    if (formType === 'WFH' && userFloor === 3) {
+      const floor3WfhCount = events.filter(ev => {
+        if (ev.date !== selectedDateStr || ev.type !== 'WFH') return false;
+        const evUser = TEAM_MEMBERS.find(m => m.name === ev.name);
+        return evUser && evUser.floor === 3;
+      }).length;
+
+      if (floor3WfhCount >= 2) {
+        alert('❌ โควต้า WFH ของพนักงานชั้น 3 ในวันนี้เต็มแล้ว (จำกัดไม่เกิน 2 คนต่อวัน) สำหรับชั้นอื่นสามารถลงทะเบียนเพิ่มได้ปกติ');
+        setFormName(''); // แก้ไขบั๊ก: ล้างค่ารายชื่อให้กลับมาเลือกใหม่ได้ทันที ไม่ค้างล็อกระบบ
         return;
       }
     }
@@ -288,7 +381,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 1. เลย์เอาต์ใหม่: ปุ่ม [วันนี้] แยกรอยต่อขนานคู่กับบล็อกปรับเดือน/ปี */}
         <div className="flex space-x-2 items-stretch">
           <button 
             type="button"
@@ -425,6 +517,7 @@ export default function App() {
                           </div>
                         )}
                         <div>
+                          {/* 1. แก้ไขให้แสดงผลเฉพาะชื่อพนักงานแบบคลีนๆ เท่านั้น */}
                           <p className="text-sm font-semibold text-slate-700">{ev.name}</p>
                           <p className="text-[11px] text-slate-400 font-medium">
                             {ev.type === 'WFH' ? '💻 Work From Home' : '🌴 วันลาพักผ่อน'}
@@ -488,17 +581,44 @@ export default function App() {
               </div>
             )}
 
+            {formType === 'Leave' && (
+              <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-100 p-2.5 rounded-xl">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">วันเริ่มต้น</label>
+                  <input 
+                    type="date" 
+                    value={leaveStartDate} 
+                    onChange={(e) => setLeaveStartDate(e.target.value)}
+                    className="w-full bg-white text-xs rounded-lg border border-slate-200 p-1.5 text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">วันสิ้นสุด</label>
+                  <input 
+                    type="date" 
+                    value={leaveEndDate} 
+                    onChange={(e) => setLeaveEndDate(e.target.value)}
+                    className="w-full bg-white text-xs rounded-lg border border-slate-200 p-1.5 text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex space-x-2">
               <div className="relative flex-1">
-                <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10" />
+                {/* แก้ไขเชิงโครงสร้าง: ใส่ pointer-events-none ป้องกันไอคอนดักรับแรงกดแทนตัวเลือก */}
+                <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10 pointer-events-none" />
                 <select
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-700 appearance-none relative z-0"
+                  className="w-full pl-10 pr-8 py-2 bg-slate-50 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-700 appearance-none relative z-0 cursor-pointer"
                 >
                   <option value="">เลือกชื่อของคุณ...</option>
-                  {TEAM_MEMBERS.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {TEAM_MEMBERS.map((member) => (
+                    /* 1. แก้ไขตัวเลือกภายใน List ดรอปดาวน์ให้แสดงผลเฉพาะชื่ออย่างเดียว ไม่มีเลขชั้นซ้อนท้าย */
+                    <option key={member.name} value={member.name}>
+                      {member.name}
+                    </option>
                   ))}
                 </select>
                 <div className="absolute right-3 top-3 pointer-events-none w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-slate-400"></div>
