@@ -96,16 +96,11 @@ export default function App() {
     setLeaveEndDate(selectedDateStr);
   }, [selectedDateStr]);
 
-  useEffect(() => {
-    setFormError(null);
-  }, [formName, formType, selectedDateStr, leaveStartDate, leaveEndDate, isRecurring]);
-
   const fetchDatabase = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // 🛠️ แก้ไขเอา 'Cache-Control': 'no-cache' ออกเพื่อผ่านด่านตรวจ CORS ของ GitHub API
       const res = await fetch(API_ENDPOINT, {
         headers: {
           'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
@@ -135,6 +130,7 @@ export default function App() {
     const today = new Date();
     setCurrentDate(today);
     setSelectedDateStr(getLocalDateStr(today));
+    setFormError(null);
   };
 
   const updateDatabase = async (newEvents, commitMessage) => {
@@ -305,8 +301,9 @@ export default function App() {
       }).length;
 
       if (floor3WfhCount >= 2) {
-        setFormError('❌ โควต้า WFH ของพนักงานชั้น 3 เต็มแล้ว (ไม่เกิน 2 คน/วัน) ชั้นอื่นจองได้ปกติครับ');
-        setFormName(''); 
+        // 🛠️ แก้ไขหลัก: นำคำสั่งเปลี่ยนค่าว่างของตัวแปรในระบบตรวจสอบผลลัพธ์อัตโนมัติออก 
+        // เพื่อล็อกข้อความแจ้งเตือนสีแดงค้างไว้ให้ผู้ใช้งานเห็นจนกว่าจะกดเปลี่ยนชื่อด้วยตัวเอง
+        setFormError('❌ โควต้า WFH ของทีมงานชั้น 3 เต็มแล้ว (ไม่เกิน 2 คนต่อวัน) สำหรับชั้นอื่นจองเพิ่มได้ปกติครับ');
         return;
       }
     }
@@ -325,6 +322,7 @@ export default function App() {
 
   const handleDeleteEvent = async (id, name, type) => {
     if (!confirm('คุณแน่ใจหรือไม่ที่จะลบรายการนี้?')) return;
+    setFormError(null);
     const updatedEvents = events.filter(ev => ev.id !== id);
     await updateDatabase(updatedEvents, `Delete ${type} of ${name}`);
   };
@@ -345,6 +343,7 @@ export default function App() {
 
   const changeMonth = (offset) => {
     setCurrentDate(new Date(year, month + offset, 1));
+    setFormError(null);
   };
 
   const monthNames = [
@@ -390,7 +389,7 @@ export default function App() {
               <span className="text-sm font-bold text-slate-700">{monthNames[month]}</span>
               <select
                 value={year}
-                onChange={(e) => setCurrentDate(new Date(Number(e.target.value), month, 1))}
+                onChange={(e) => { setCurrentDate(new Date(Number(e.target.value), month, 1)); setFormError(null); }}
                 className="text-sm font-bold text-blue-600 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {dynamicYears.map((y) => (
@@ -399,7 +398,7 @@ export default function App() {
               </select>
             </div>
 
-            <button type="button" onClick={(e) => changeMonth(1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
+            <button type="button" onClick={() => changeMonth(1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
@@ -433,7 +432,7 @@ export default function App() {
                 <button
                   key={dateStr}
                   type="button"
-                  onClick={() => setSelectedDateStr(dateStr)}
+                  onClick={() => { setSelectedDateStr(dateStr); setFormError(null); }}
                   className={`aspect-square rounded-2xl flex flex-col justify-between p-1.5 transition relative ${bgClass}`}
                 >
                   <span className={`text-xs font-semibold ${isBankHoliday ? 'text-rose-600' : ''}`}>
@@ -534,7 +533,7 @@ export default function App() {
             <div className="flex space-x-2">
               <button
                 type="button"
-                onClick={() => { setFormType('WFH'); }}
+                onClick={() => { setFormType('WFH'); setFormError(null); }}
                 className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
                   formType === 'WFH'
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
@@ -545,7 +544,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => { setFormType('Leave'); setIsRecurring(false); }}
+                onClick={() => { setFormType('Leave'); setIsRecurring(false); setFormError(null); }}
                 className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
                   formType === 'Leave'
                     ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
@@ -562,7 +561,7 @@ export default function App() {
                   type="checkbox"
                   id="recurring-wfh"
                   checked={isRecurring}
-                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  onChange={(e) => { setIsRecurring(e.target.checked); setFormError(null); }}
                   className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 border-slate-300 transition"
                 />
                 <label htmlFor="recurring-wfh" className="text-xs text-slate-600 font-semibold select-none cursor-pointer">
@@ -578,7 +577,7 @@ export default function App() {
                   <input 
                     type="date" 
                     value={leaveStartDate} 
-                    onChange={(e) => setLeaveStartDate(e.target.value)}
+                    onChange={(e) => { setLeaveStartDate(e.target.value); setFormError(null); }}
                     className="w-full bg-white text-xs rounded-lg border border-slate-200 p-1.5 text-slate-700 focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -587,7 +586,7 @@ export default function App() {
                   <input 
                     type="date" 
                     value={leaveEndDate} 
-                    onChange={(e) => setLeaveEndDate(e.target.value)}
+                    onChange={(e) => { setLeaveEndDate(e.target.value); setFormError(null); }}
                     className="w-full bg-white text-xs rounded-lg border border-slate-200 p-1.5 text-slate-700 focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -595,7 +594,7 @@ export default function App() {
             )}
 
             {formError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl flex items-center space-x-2 text-xs font-semibold shadow-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl flex items-center space-x-2 text-xs font-semibold shadow-sm animate-shake">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
                 <span>{formError}</span>
               </div>
@@ -606,7 +605,7 @@ export default function App() {
                 <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10 pointer-events-none" />
                 <select
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
+                  onChange={(e) => { setFormName(e.target.value); setFormError(null); }}
                   className="w-full pl-10 pr-8 py-2 bg-slate-50 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-700 appearance-none relative z-0 cursor-pointer"
                 >
                   <option value="">เลือกชื่อของคุณ...</option>
