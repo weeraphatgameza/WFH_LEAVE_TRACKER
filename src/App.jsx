@@ -89,7 +89,6 @@ export default function App() {
   const toBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
   const fromBase64 = (str) => decodeURIComponent(escape(atob(str)));
 
-  // 🛠️ แก้ไขหลัก: ปรับ API_ENDPOINT ให้ยิงตรงหา GitHub เสมอ ไม่ว่าจะรันที่ไหน
   const API_ENDPOINT = `https://api.github.com/repos/${import.meta.env.VITE_GITHUB_REPO}/contents/db.json`;
 
   useEffect(() => {
@@ -101,17 +100,16 @@ export default function App() {
     setFormError(null);
   }, [formName, formType, selectedDateStr, leaveStartDate, leaveEndDate, isRecurring]);
 
-  // 🛠️ แก้ไขหลัก: ใส่ Headers ยืนยันตัวตนส่งไปหา GitHub เสมอ
   const fetchDatabase = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      // 🛠️ แก้ไขเอา 'Cache-Control': 'no-cache' ออกเพื่อผ่านด่านตรวจ CORS ของ GitHub API
       const res = await fetch(API_ENDPOINT, {
         headers: {
           'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Cache-Control': 'no-cache'
+          'Accept': 'application/vnd.github.v3+json'
         }
       });
       if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูลบน GitHub ได้');
@@ -139,7 +137,6 @@ export default function App() {
     setSelectedDateStr(getLocalDateStr(today));
   };
 
-  // 🛠️ แก้ไขหลัก: ปรับปรุงส่วนบันทึกข้อมูลให้ส่ง Headers ไปหา GitHub ตรงๆ
   const updateDatabase = async (newEvents, commitMessage) => {
     setSubmitting(true);
     try {
@@ -402,7 +399,7 @@ export default function App() {
               </select>
             </div>
 
-            <button type="button" onClick={() => changeMonth(1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
+            <button type="button" onClick={(e) => changeMonth(1)} className="p-1.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition">
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
