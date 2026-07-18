@@ -185,8 +185,7 @@ export default function App() {
     }
   };
 
-  const handleAddEvent = async (e) => {
-    e.preventDefault();
+  const handleAddEvent = async () => {
     if (!formName) return alert('กรุณาเลือกชื่อของคุณจากรายการ');
 
     const userObj = TEAM_MEMBERS.find(m => m.name === formName);
@@ -315,7 +314,7 @@ export default function App() {
 
       if (floor3WfhCount >= 2) {
         alert('❌ โควต้า WFH ของพนักงานชั้น 3 ในวันนี้เต็มแล้ว (จำกัดไม่เกิน 2 คนต่อวัน) สำหรับชั้นอื่นสามารถลงทะเบียนเพิ่มได้ปกติ');
-        setFormName(''); // แก้ไขบั๊ก: ล้างค่ารายชื่อให้กลับมาเลือกใหม่ได้ทันที ไม่ค้างล็อกระบบ
+        setFormName(''); 
         return;
       }
     }
@@ -517,7 +516,6 @@ export default function App() {
                           </div>
                         )}
                         <div>
-                          {/* 1. แก้ไขให้แสดงผลเฉพาะชื่อพนักงานแบบคลีนๆ เท่านั้น */}
                           <p className="text-sm font-semibold text-slate-700">{ev.name}</p>
                           <p className="text-[11px] text-slate-400 font-medium">
                             {ev.type === 'WFH' ? '💻 Work From Home' : '🌴 วันลาพักผ่อน'}
@@ -538,7 +536,8 @@ export default function App() {
             )}
           </div>
 
-          <form onSubmit={handleAddEvent} className="pt-2 border-t border-slate-100 space-y-3">
+          {/* ปรับปรุงโครงสร้าง: ถอด onSubmit ดั้งเดิมออกเพื่อตัดขาดวงจรล็อกของเบราว์เซอร์ */}
+          <form onSubmit={(e) => e.preventDefault()} className="pt-2 border-t border-slate-100 space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">บันทึกรายการใหม่</h3>
             
             <div className="flex space-x-2">
@@ -606,7 +605,6 @@ export default function App() {
 
             <div className="flex space-x-2">
               <div className="relative flex-1">
-                {/* แก้ไขเชิงโครงสร้าง: ใส่ pointer-events-none ป้องกันไอคอนดักรับแรงกดแทนตัวเลือก */}
                 <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10 pointer-events-none" />
                 <select
                   value={formName}
@@ -615,7 +613,6 @@ export default function App() {
                 >
                   <option value="">เลือกชื่อของคุณ...</option>
                   {TEAM_MEMBERS.map((member) => (
-                    /* 1. แก้ไขตัวเลือกภายใน List ดรอปดาวน์ให้แสดงผลเฉพาะชื่ออย่างเดียว ไม่มีเลขชั้นซ้อนท้าย */
                     <option key={member.name} value={member.name}>
                       {member.name}
                     </option>
@@ -623,8 +620,11 @@ export default function App() {
                 </select>
                 <div className="absolute right-3 top-3 pointer-events-none w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-slate-400"></div>
               </div>
+              
+              {/* ปรับปรุงโครงสร้าง: เปลี่ยน type เป็น button และผูก onClick ตรงสายแทนเพื่อตัดวงจรฟรีซ */}
               <button
-                type="submit"
+                type="button"
+                onClick={handleAddEvent}
                 disabled={submitting || loading}
                 className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 active:scale-95 transition disabled:opacity-50 flex items-center space-x-1"
               >
