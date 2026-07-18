@@ -72,6 +72,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
 
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDateStr, setSelectedDateStr] = useState(getLocalDateStr(new Date()));
@@ -88,29 +89,32 @@ export default function App() {
   const toBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
   const fromBase64 = (str) => decodeURIComponent(escape(atob(str)));
 
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const API_ENDPOINT = isLocal ? `https://api.github.com/repos/${import.meta.env.VITE_GITHUB_REPO}/contents/db.json` : '/api/tracker';
+  // 🛠️ แก้ไขหลัก: ปรับ API_ENDPOINT ให้ยิงตรงหา GitHub เสมอ ไม่ว่าจะรันที่ไหน
+  const API_ENDPOINT = `https://api.github.com/repos/${import.meta.env.VITE_GITHUB_REPO}/contents/db.json`;
 
   useEffect(() => {
     setLeaveStartDate(selectedDateStr);
     setLeaveEndDate(selectedDateStr);
   }, [selectedDateStr]);
 
+  useEffect(() => {
+    setFormError(null);
+  }, [formName, formType, selectedDateStr, leaveStartDate, leaveEndDate, isRecurring]);
+
+  // 🛠️ แก้ไขหลัก: ใส่ Headers ยืนยันตัวตนส่งไปหา GitHub เสมอ
   const fetchDatabase = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const fetchOptions = {};
-      if (isLocal) {
-        fetchOptions.headers = {
+      const res = await fetch(API_ENDPOINT, {
+        headers: {
           'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json'
-        };
-      }
-
-      const res = await fetch(API_ENDPOINT, fetchOptions);
-      if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูลได้');
+          'Accept': 'application/vnd.github.v3+json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+      if (!res.ok) throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูลบน GitHub ได้');
 
       const data = await res.json();
       setFileSha(data.sha);
@@ -126,16 +130,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (isLocal) {
-      if (import.meta.env.VITE_GITHUB_TOKEN && import.meta.env.VITE_GITHUB_REPO) {
-        fetchDatabase();
-      } else {
-        setError('กรุณาตั้งค่า VITE_GITHUB_TOKEN และ VITE_GITHUB_REPO ในไฟล์ .env.local');
-        setLoading(false);
-      }
-    } else {
-      fetchDatabase();
-    }
+    fetchDatabase();
   }, []);
 
   const handleGoToToday = () => {
@@ -144,32 +139,26 @@ export default function App() {
     setSelectedDateStr(getLocalDateStr(today));
   };
 
+  // 🛠️ แก้ไขหลัก: ปรับปรุงส่วนบันทึกข้อมูลให้ส่ง Headers ไปหา GitHub ตรงๆ
   const updateDatabase = async (newEvents, commitMessage) => {
     setSubmitting(true);
     try {
       const updatedData = { events: newEvents };
       const jsonString = JSON.stringify(updatedData, null, 2);
       
-      const fetchOptions = {
+      const res = await fetch(API_ENDPOINT, {
         method: 'PUT',
+        headers: {
+          'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        },
         body: JSON.stringify({
           message: commitMessage,
           content: toBase64(jsonString),
           sha: fileSha
         })
-      };
-
-      if (isLocal) {
-        fetchOptions.headers = {
-          'Authorization': `token ${import.meta.env.VITE_GITHUB_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github.v3+json'
-        };
-      } else {
-        fetchOptions.headers = { 'Content-Type': 'application/json' };
-      }
-
-      const res = await fetch(API_ENDPOINT, fetchOptions);
+      });
       if (!res.ok) throw new Error('บันทึกข้อมูลไม่สำเร็จ มีการอัปเดตซ้อนจากสมาชิกคนอื่น กรุณารีเฟรชแอป');
 
       const data = await res.json();
@@ -177,7 +166,7 @@ export default function App() {
       setEvents(newEvents);
       return true;
     } catch (err) {
-      alert(err.message);
+      setFormError(err.message);
       fetchDatabase();
       return false;
     } finally {
@@ -186,7 +175,10 @@ export default function App() {
   };
 
   const handleAddEvent = async () => {
-    if (!formName) return alert('กรุณาเลือกชื่อของคุณจากรายการ');
+    if (!formName) {
+      setFormError('⚠️ กรุณาเลือกชื่อของคุณจากรายการ');
+      return;
+    }
 
     const userObj = TEAM_MEMBERS.find(m => m.name === formName);
     const userFloor = userObj ? userObj.floor : 24;
@@ -195,7 +187,10 @@ export default function App() {
       let start = new Date(leaveStartDate);
       let end = new Date(leaveEndDate);
 
-      if (start > end) return alert('❌ วันเริ่มต้นจองต้องไม่เกินวันสิ้นสุด');
+      if (start > end) {
+        setFormError('❌ วันเริ่มต้นจองต้องไม่เกินวันสิ้นสุด');
+        return;
+      }
 
       const datesToAdd = [];
       const skippedDays = [];
@@ -216,7 +211,7 @@ export default function App() {
       }
 
       if (datesToAdd.length === 0) {
-        alert('❌ ไม่สามารถบันทึกวันลาในช่วงนี้ได้ เนื่องจากเป็นวันหยุดเสาร์-อาทิตย์ทั้งหมด หรือคุณได้ลงทะเบียนซ้ำไปแล้ว');
+        setFormError('❌ ไม่สามารถบันทึกได้ เนื่องจากคุณลงทะเบียนซ้ำหรือช่วงวันดังกล่าวเป็นวันหยุดเสาร์-อาทิตย์ทั้งหมด');
         setFormName('');
         return;
       }
@@ -273,7 +268,7 @@ export default function App() {
       }
 
       if (datesToAdd.length === 0) {
-        alert('❌ ไม่สามารถจอง WFH รายสัปดาห์ได้ เนื่องจากชื่อซ้ำหรือโควต้าชั้น 3 เต็มหมดแล้ว');
+        setFormError('❌ ไม่สามารถจอง WFH รายสัปดาห์ได้ เนื่องจากชื่อซ้ำหรือโควต้าของทีมชั้น 3 เต็มหมดแล้ว');
         setFormName(''); 
         setIsRecurring(false);
         return;
@@ -292,7 +287,7 @@ export default function App() {
         setFormName('');
         setIsRecurring(false);
         if (skippedDays.length > 0) {
-          alert(`บันทึกสำเร็จ! ข้ามวันที่ไม่เข้าเงื่อนไข: วันที่ ${skippedDays.join(', ')}`);
+          setFormError(`บันทึกสำเร็จบางส่วน! ข้ามวันที่โควต้าเต็ม/ชื่อซ้ำ: วันที่ ${skippedDays.join(', ')}`);
         }
       }
       return;
@@ -300,7 +295,7 @@ export default function App() {
 
     const isDuplicate = events.some(ev => ev.date === selectedDateStr && ev.name === formName);
     if (isDuplicate) {
-      alert(`❌ ${formName} ได้ลงทะเบียนใช้งานในวันที่เลือกนี้ไปแล้ว ไม่สามารถเลือกซ้ำได้`);
+      setFormError(`❌ ${formName} ได้ลงทะเบียนใช้งานในวันนี้ไปแล้ว ไม่สามารถจองซ้ำได้`);
       setFormName(''); 
       return;
     }
@@ -313,7 +308,7 @@ export default function App() {
       }).length;
 
       if (floor3WfhCount >= 2) {
-        alert('❌ โควต้า WFH ของพนักงานชั้น 3 ในวันนี้เต็มแล้ว (จำกัดไม่เกิน 2 คนต่อวัน) สำหรับชั้นอื่นสามารถลงทะเบียนเพิ่มได้ปกติ');
+        setFormError('❌ โควต้า WFH ของพนักงานชั้น 3 เต็มแล้ว (ไม่เกิน 2 คน/วัน) ชั้นอื่นจองได้ปกติครับ');
         setFormName(''); 
         return;
       }
@@ -536,7 +531,6 @@ export default function App() {
             )}
           </div>
 
-          {/* ปรับปรุงโครงสร้าง: ถอด onSubmit ดั้งเดิมออกเพื่อตัดขาดวงจรล็อกของเบราว์เซอร์ */}
           <form onSubmit={(e) => e.preventDefault()} className="pt-2 border-t border-slate-100 space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">บันทึกรายการใหม่</h3>
             
@@ -603,6 +597,13 @@ export default function App() {
               </div>
             )}
 
+            {formError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl flex items-center space-x-2 text-xs font-semibold shadow-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <div className="flex space-x-2">
               <div className="relative flex-1">
                 <User className="absolute left-3.5 top-2.5 text-slate-400 w-4 h-4 z-10 pointer-events-none" />
@@ -620,8 +621,6 @@ export default function App() {
                 </select>
                 <div className="absolute right-3 top-3 pointer-events-none w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-slate-400"></div>
               </div>
-              
-              {/* ปรับปรุงโครงสร้าง: เปลี่ยน type เป็น button และผูก onClick ตรงสายแทนเพื่อตัดวงจรฟรีซ */}
               <button
                 type="button"
                 onClick={handleAddEvent}
