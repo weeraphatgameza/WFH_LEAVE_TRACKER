@@ -33,7 +33,7 @@ const BANK_HOLIDAYS = {
 };
 
 const TEAM_MEMBERS = [
-  { name: 'พี่ฤทธิ์', floor: 24 },
+  { name: 'พี่ฤทธิ์', floor: 1 },
   { name: 'พี่อี๊ด', floor: 24 },
   { name: 'พี่ตู่', floor: 3 },
   { name: 'พี่นนท์', floor: 3 },
@@ -42,7 +42,7 @@ const TEAM_MEMBERS = [
   { name: 'พี่พลอย', floor: 3 },
   { name: 'พี่เอ็ม', floor: 3 },
   { name: 'พี่เค้ก', floor: 24 },
-  { name: 'น้องเกม', floor: 24 },
+  { name: 'น้องเกม', floor: 3 },
   { name: 'น้องรุ้ง', floor: 24 }
 ];
 
