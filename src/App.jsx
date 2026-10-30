@@ -42,6 +42,7 @@ const TEAM_MEMBERS = [
   { name: 'พี่พลอย', floor: 3 },
   { name: 'พี่เอ็ม', floor: 3 },
   { name: 'พี่เค้ก', floor: 24 },
+  { name: 'น้องพลอย', floor: 3 },
   { name: 'น้องเกม', floor: 3 },
   { name: 'น้องรุ้ง', floor: 24 }
 ];
